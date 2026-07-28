@@ -1,0 +1,15 @@
+# golangci-lint, pinned in the Makefile so local and CI lint identically.
+version: "2"
+
+linters:
+  # standard = errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+
+  exclusions:
+    generated: lax
+    presets:
+      # Unchecked `fmt.Fprintln` to stdout/stderr is idiomatic here; the code
+      # uses `_ =` where an ignore is load-bearing. These presets carry the
+      # standard exclusions for both.
+      - common-false-positives
+      - std-error-handling
