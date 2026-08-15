@@ -63,6 +63,46 @@ func TestRequestRejectsBadArguments(t *testing.T) {
 	}
 }
 
+// The point of summarising: gh's answer echoes the reply body, the diff hunk
+// and the author's URLs back at a caller that is usually an agent paying for
+// every token of it.
+func TestPostedKeepsOnlyTheURL(t *testing.T) {
+	response := []byte(`{
+		"id": 987654,
+		"html_url": "https://github.com/o/r/pull/29#discussion_r987654",
+		"diff_hunk": "@@ -1,3 +1,4 @@\n-old\n+new",
+		"body": "Fixed in abc123.",
+		"user": {"login": "khr", "avatar_url": "https://example.invalid/a.png"},
+		"reactions": {"total_count": 0, "+1": 0}
+	}`)
+
+	got := posted(response)
+	if want := "pr-reply: posted https://github.com/o/r/pull/29#discussion_r987654"; got != want {
+		t.Fatalf("posted() = %q, want %q", got, want)
+	}
+	for _, echoed := range []string{"diff_hunk", "Fixed in abc123", "avatar_url", "reactions"} {
+		if strings.Contains(got, echoed) {
+			t.Errorf("posted() echoed %q back: %s", echoed, got)
+		}
+	}
+}
+
+// A response gh never promised (an API change, a proxy's HTML) still means the
+// reply landed — say so rather than dumping the surprise into the context.
+func TestPostedToleratesAnUnexpectedResponse(t *testing.T) {
+	for name, response := range map[string]string{
+		"not JSON":       "<html>502 Bad Gateway</html>",
+		"empty":          "",
+		"no html_url":    `{"id": 1}`,
+		"null html_url":  `{"html_url": null}`,
+		"empty html_url": `{"html_url": ""}`,
+	} {
+		if got := posted([]byte(response)); got != "pr-reply: posted" {
+			t.Errorf("%s: posted() = %q", name, got)
+		}
+	}
+}
+
 // An empty body is a mistake (a typoed filename redirect, an empty heredoc),
 // and GitHub would post it as a blank reply — reject it before the API call.
 func TestRequestRejectsEmptyBody(t *testing.T) {
