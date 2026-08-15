@@ -14,6 +14,10 @@
 //
 // The POST is attempted exactly once, never retried: a retry after a
 // dropped connection could double-post a reply that had in fact landed.
+//
+// Success prints one line — the new comment's URL. gh's own answer is the
+// whole comment object, which echoes the reply back at whoever wrote it;
+// see posted.
 package main
 
 import (
@@ -34,13 +38,36 @@ func main() {
 		os.Exit(2)
 	}
 
+	var response bytes.Buffer
 	cmd := exec.Command("gh", "api", "--method", "POST", path, "--input", "-")
 	cmd.Stdin = bytes.NewReader(payload)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = &response
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
+		// gh diagnoses the failure on stderr but leaves the API's own error
+		// body on stdout, where the detail is — relay it.
+		if body := bytes.TrimRight(response.Bytes(), "\n"); len(body) > 0 {
+			fmt.Fprintf(os.Stderr, "%s\n", body)
+		}
 		os.Exit(1)
 	}
+	fmt.Println(posted(response.Bytes()))
+}
+
+// posted summarises the created reply. gh answers a successful POST with the
+// whole comment object — around 3 KB of JSON, of which the caller's own body
+// is echoed back and the rest is the diff hunk, two dozen author URLs and the
+// reaction counts. The caller is usually an agent, so that echo lands in a
+// context window as roughly a thousand tokens saying nothing it did not just
+// write; only the new comment's URL is worth keeping.
+func posted(response []byte) string {
+	var reply struct {
+		HTMLURL string `json:"html_url"`
+	}
+	if err := json.Unmarshal(response, &reply); err != nil || reply.HTMLURL == "" {
+		return "pr-reply: posted"
+	}
+	return "pr-reply: posted " + reply.HTMLURL
 }
 
 // request turns the arguments into the API path and JSON payload of the

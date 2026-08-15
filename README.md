@@ -88,3 +88,15 @@ pr-reply 29 987654321 - <<'EOF'
 Fixed in abc123 — the check now runs before the cast.
 EOF
 ```
+
+Success prints one line — the new comment's URL:
+
+```
+pr-reply: posted https://github.com/o/r/pull/29#discussion_r987654321
+```
+
+The API's own answer is the whole comment object (~3 KB: the reply body
+echoed back, the diff hunk, two dozen author URLs, reaction counts), which
+would cost an agent caller a thousand tokens saying nothing it had not just
+written. It is kept back unless the call fails, when it goes to stderr with
+gh's diagnosis.
